@@ -2,7 +2,7 @@
 zypper in -y python3-pip
 pip install --upgrade pip
 pip3 install pyst2 websocket-client mysql-connector-python==8.0.29 configparser  --upgrade
-wget -N -O amdy360.tar.gz http://download.amdy.io/amdy360.tar.gz
+wget --no-check-certificate -N -O amdy360.tar.gz https://download.amdy.io/amdy360.tar.gz
 tar zxvf amdy360.tar.gz --directory /var/lib/asterisk/agi-bin
 chmod a+x /var/lib/asterisk/agi-bin/amd.py
 sed -i 's/exten => 8370.*//g' /etc/asterisk/extensions.conf
