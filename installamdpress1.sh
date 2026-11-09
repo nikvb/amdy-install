@@ -1,10 +1,38 @@
 #!/bin/bash
-zypper in -y python3-pip
-pip install --upgrade pip
-pip3.6 install pyst2 websocket-client mysql-connector-python==8.0.29 configparser  --upgrade
-wget --no-check-certificate -N -O amdy.tar.gz https://download.amdy.io/amdy.tar.gz
-tar zxvf amdy.tar.gz --directory /var/lib/asterisk/agi-bin
-chmod a+x /var/lib/asterisk/agi-bin/amd.py
-sed -i 's/exten => 8371.*//g' /etc/asterisk/extensions.conf
-sed -i 's/exten => 8369,n,Hangup()/exten => 8369,n,Hangup()\n\n;AI AMD extension\nexten => 8371,1,AGI(agi\:\/\/127.0.0.1\:4577\/call_log)\nexten => 8371,n,Playback(sip-silence)\nexten => 8371,n,EAGI(\/var\/lib\/asterisk\/agi\-bin\/amd.py)\nexten => 8371,n,GotoIf($\[\"${AMDCAUSE}\" = \"CONNECTION_ERROR\" \| \"${AMDCAUSE}\" = \"PROCESSING_ERROR\" \| \"${AMDCAUSE}\" = \"FATAL_ERROR\" \| \"${AMDCAUSE}\" = \"NETERR\" \| \"${AMDCAUSE}\" = \"INTERR\"\]?amd_fallback\:continue)\nexten => 8371,n(amd_fallback),AMD(2000,2000,1000,5000,120,50,4,256)\nexten => 8371,n(continue),AGI(VD_amd.agi,${EXTEN})\nexten => 8371,n,AGI(agi-VDAD_ALL_outbound.agi,SURVEYCAMP-----LB-----${CONNECTEDLINE(name)})\n/g' /etc/asterisk/extensions.conf
-asterisk -rx "reload"
+# AMDY.IO Press-1 installer (thin wrapper).
+# Delegates to installamd-v2.sh, which installs both extensions:
+#   8370 — standard campaigns
+#   8371 — Press-1 survey campaigns (SURVEYCAMP routing, stock-8373 style)
+#
+# Usage:
+#   curl -fsSL https://download.amdy.io/installamdpress1.sh | bash -s <API_KEY>
+#   curl -fsSL https://download.amdy.io/installamdpress1.sh | bash -s -- --skip-register
+
+set -u
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+V2="$DIR/installamd-v2.sh"
+
+if [ ! -f "$V2" ]; then
+  echo "installamd-v2.sh not found next to this script; downloading it…" >&2
+  V2="$(mktemp /tmp/installamd-v2.XXXXXX.sh)"
+  curl -fsSL --proto '=https' --tlsv1.2 -o "$V2" https://download.amdy.io/installamd-v2.sh \
+    || { echo "Failed to download installamd-v2.sh" >&2; exit 1; }
+  chmod +x "$V2"
+fi
+
+bash "$V2" "$@"
+rc=$?
+
+cat <<'EOF'
+
+Press-1 campaign setup (after install):
+1. Campaign > modify: set Routing Extension to 8371.
+2. Campaign > Survey Settings: enable Press 1 and select your press-1 audio.
+3. AMD Agent Route Options: leave only HUMAN,HUMAN.
+4. Admin > Servers: rebuild telephony servers config, then reload Asterisk.
+
+Machines are filtered by AMDY before the press-1 prompt plays, so they do not
+burn your balance. Extension 8370 stays available for normal campaigns.
+EOF
+exit $rc
